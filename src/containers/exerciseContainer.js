@@ -3,7 +3,11 @@ import React, { Component } from 'react'
 import PropTypes from 'prop-types'
 import Exercise from '../components/exercise'
 import ExerciseForm from '../components/exerciseForm'
-import fb from '../firebase'
+import {
+  pushToDatabase,
+  removeFromDatabase,
+  listenForUpdates,
+} from '../firebaseService'
 
 class ExerciseContainer extends Component {
   constructor(props) {
@@ -12,26 +16,30 @@ class ExerciseContainer extends Component {
       exercises: [],
     }
   }
+
   componentDidMount() {
-    let exercisesRef = fb
-      .database()
-      .ref('exercises')
-      .orderByKey()
-      .limitToLast(100)
-    exercisesRef.on('child_added', snapshot => {
-      let exercise = { text: snapshot.val(), id: snapshot.key }
+    listenForUpdates('exercises', this.buildExerciseList)
+  }
+
+  buildExerciseList = snapshot => {
+    const key = snapshot.key
+    // if snapshot is from a removed child, don't add the snapshot to state
+    if (this.state.exercises.filter(e => e.id === key).length > 0) {
+      const exercises = this.state.exercises.filter(e => e.id !== key)
+      this.setState({ exercises })
+    } else {
+      // otherwise, add new child
+      const exercise = { text: snapshot.val(), id: snapshot.key }
       this.setState({ exercises: [exercise].concat(this.state.exercises) })
-    })
+    }
   }
 
   submitExercise = data => {
-    console.log('exercise submitted', data)
-    const myRef = fb
-      .database()
-      .ref('exercises')
-      .push()
-    myRef.set(data)
-    console.log(myRef.toString())
+    pushToDatabase('exercises', data)
+  }
+
+  removeExercise = key => {
+    removeFromDatabase('exercises', key)
   }
 
   render() {
@@ -44,7 +52,9 @@ class ExerciseContainer extends Component {
             const exTag = ex.text.exerciseTag
             return (
               <Exercise
-                key={`${exName}${exTag}${i}`}
+                key={ex.id}
+                removalKey={ex.id}
+                removeExercise={this.removeExercise}
                 exerciseName={exName}
                 exerciseTag={exTag}
               />
